@@ -1,8 +1,9 @@
-@import "tailwindcss/preflight";
-@import "tailwindcss/components";
-@import "tailwindcss/utilities";
+/* src/app/globals.css */
 
-/* Podés dejar abajo tu CSS custom */
+/* ——— Importa Tailwind completo (CSS-first) ——— */
+@import "tailwindcss";
+
+/* ——— Tus estilos custom ——— */
 :root {
   --background: #ffffff;
   --foreground: #171717;
