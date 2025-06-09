@@ -1,5 +1,11 @@
-// /src/lib/contract.ts
-import { BrowserProvider, Contract } from "ethers";
+// src/lib/contract.ts
+import {
+  BrowserProvider,
+  Contract,
+  type JsonRpcSigner,
+  type BigNumberish,
+  type TransactionResponse,
+} from "ethers";
 
 //
 // 1) Contrato original (datosDeClases)
@@ -20,29 +26,31 @@ const CLASS_ABI = [
 ];
 
 //
-// 2) Contrato ERC-1155 nuevo (mint, uri, balanceOf)
+// 2) Tu ERC-1155 desplegado con nextTokenId + mintNew
 //
-const ERC1155_CONTRACT_ADDRESS = "0x208603Eba86e5C92C64B8460a9D67e001C2ff433";
+const ERC1155_CONTRACT_ADDRESS = "0xe3Dc6ab415D10a1B8bd817057B0Dd58396d37F55";
 const ERC1155_ABI = [
+  // lector del próximo ID
   {
-    inputs: [
-      { internalType: "address", name: "to", type: "address" },
-      { internalType: "uint256", name: "id", type: "uint256" },
-      { internalType: "uint256", name: "amount", type: "uint256" },
-      { internalType: "bytes", name: "data", type: "bytes" },
-    ],
-    name: "mint",
-    outputs: [],
-    stateMutability: "nonpayable",
-    type: "function",
-  },
-  {
-    inputs: [{ internalType: "uint256", name: "", type: "uint256" }],
-    name: "uri",
-    outputs: [{ internalType: "string", name: "", type: "string" }],
+    inputs: [],
+    name: "nextTokenId",
+    outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
     stateMutability: "view",
     type: "function",
   },
+  // mintNew como antes
+  {
+    inputs: [
+      { internalType: "address", name: "to", type: "address" },
+      { internalType: "uint256", name: "amount", type: "uint256" },
+      { internalType: "bytes", name: "data", type: "bytes" },
+    ],
+    name: "mintNew",
+    outputs: [{ internalType: "uint256", name: "newId", type: "uint256" }],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  // balanceOf y uri
   {
     inputs: [
       { internalType: "address", name: "account", type: "address" },
@@ -53,92 +61,85 @@ const ERC1155_ABI = [
     stateMutability: "view",
     type: "function",
   },
+  {
+    inputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+    name: "uri",
+    outputs: [{ internalType: "string", name: "", type: "string" }],
+    stateMutability: "view",
+    type: "function",
+  },
 ];
 
 export let provider: BrowserProvider;
-export let signer: any;
-export let classContract: Contract;     // para datosDeClases
-export let erc1155Contract: Contract;   // para mint, uri, balanceOf
+export let signer: JsonRpcSigner;
+export let classContract: Contract;
+export let erc1155Contract: Contract;
 
 export async function connectWallet(): Promise<string | null> {
   if (!window.ethereum) {
     alert("Instalá MetaMask para usar esta dApp.");
     return null;
   }
-  try {
-    provider = new BrowserProvider(window.ethereum);
-    signer = await provider.getSigner();
 
-    // instancia para datosDeClases
-    classContract = new Contract(CLASS_CONTRACT_ADDRESS, CLASS_ABI, signer);
-    // instancia para ERC-1155
-    erc1155Contract = new Contract(
-      ERC1155_CONTRACT_ADDRESS,
-      ERC1155_ABI,
-      signer
-    );
+  provider = new BrowserProvider(window.ethereum);
+  signer = await provider.getSigner();
 
-    return await signer.getAddress();
-  } catch (error) {
-    console.error("Error conectando la wallet:", error);
-    return null;
-  }
+  classContract = new Contract(CLASS_CONTRACT_ADDRESS, CLASS_ABI, signer);
+  erc1155Contract = new Contract(
+    ERC1155_CONTRACT_ADDRESS,
+    ERC1155_ABI,
+    signer
+  );
+
+  return await signer.getAddress();
 }
 
-/** Sigue funcionando igual que antes */
 export async function getClaseData(tokenId: string) {
   if (!classContract) return null;
-  try {
-    const data = await classContract.datosDeClases(tokenId);
-    return {
-      clase: data.clase.toString(),
-      tema: data.tema,
-      alumno: data.alumno,
-    };
-  } catch (error) {
-    console.error(
-      `Error leyendo datos del contrato de clases para Token ID ${tokenId}:`,
-      error
-    );
-    return null;
-  }
+  const data = await classContract.datosDeClases(tokenId);
+  return {
+    clase: data.clase.toString(),
+    tema: data.tema,
+    alumno: data.alumno,
+  };
 }
 
-/** Nuevo mint sobre tu ERC-1155 */
+/**
+ * Mintea un NFT con ID incremental, leyendo antes nextTokenId.
+ * @returns newId si minteó OK, o null si falló.
+ */
 export async function mint(
   to: string,
-  id: number = 0,
   amount: number = 1,
   data: string = "0x"
-): Promise<boolean> {
+): Promise<number | null> {
   if (!signer || !erc1155Contract) {
     alert("Conectá tu wallet antes de mintear.");
-    return false;
+    return null;
   }
-  try {
-    const tx = await erc1155Contract.mint(to, id, amount, data);
-    alert("Transacción enviada. Esperá la confirmación.");
-    await tx.wait();
-    alert(`Mint exitoso: id=${id}, cantidad=${amount} enviada a ${to}`);
-    return true;
-  } catch (error) {
-    console.error("Error en mint:", error);
-    alert("Error al mintear. Revisá la consola para más detalles.");
-    return false;
-  }
+
+  // 1) leo el próximo ID
+  const nextIdBN = await erc1155Contract.nextTokenId();
+  const nextId = Number(nextIdBN);
+
+  // 2) lanzo la tx
+  const tx: TransactionResponse = await erc1155Contract.mintNew(
+    to,
+    amount,
+    data
+  );
+  alert("Transacción enviada. Esperá la confirmación…");
+  await tx.wait();
+
+  alert(`Mint exitoso! Token ID: ${nextId}`);
+  return nextId;
 }
 
-/** Balance de ERC-1155 */
 export async function balanceOf(
   account: string,
   id: number = 0
 ): Promise<string | null> {
   if (!erc1155Contract) return null;
-  try {
-    const bal = await erc1155Contract.balanceOf(account, id);
-    return bal.toString();
-  } catch (error) {
-    console.error("Error obteniendo balance:", error);
-    return null;
-  }
+  const balBN = await erc1155Contract.balanceOf(account, id);
+  return balBN.toString();
 }

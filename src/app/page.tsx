@@ -1,3 +1,4 @@
+// src/app/page.tsx
 "use client";
 
 import { useState } from "react";
@@ -5,28 +6,54 @@ import { connectWallet, mint, balanceOf } from "@/lib/contract";
 import { fetchNFTs, NFTData } from "@/lib/alchemy";
 import NFTCard from "@/components/NFTCard";
 
+const PROFESSOR_CONTRACT = "0x1fee62d24daa9fc0a18341b582937be1d837f91d";
+const REQUIRED_TOKEN_IDS = [6, 14, 22, 31, 45, 46, 59, 60, 73, 80];
+
 export default function Home() {
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [nfts, setNfts] = useState<NFTData[]>([]);
   const [loading, setLoading] = useState(false);
   const [balance, setBalance] = useState<string | null>(null);
-  const [recipient, setRecipient] = useState<string>("");  // ← Nuevo estado
+  const [recipient, setRecipient] = useState<string>("");
+  const [hasRequiredTokens, setHasRequiredTokens] = useState(false);
+  const [missingIds, setMissingIds] = useState<number[]>([]);
+
+  function validateRequired(tokens: NFTData[]) {
+    const ownedIds = tokens
+      .filter((n) =>
+        n.contractAddress.toLowerCase() ===
+        PROFESSOR_CONTRACT.toLowerCase()
+      )
+      .map((n) => Number(n.tokenId));
+    const faltantes = REQUIRED_TOKEN_IDS.filter(
+      (id) => !ownedIds.includes(id)
+    );
+    setMissingIds(faltantes);
+    return faltantes.length === 0;
+  }
 
   const handleConnect = async () => {
     const address = await connectWallet();
-    if (address) {
-      setWalletAddress(address);
-      setRecipient(address);           // Por defecto mandamos a nuestra propia wallet
-      await loadNFTs(address);
-      const bal = await balanceOf(address, 0);
-      setBalance(bal);
-    }
-  };
+    if (!address) return;
 
-  const loadNFTs = async (address: string) => {
+    setWalletAddress(address);
+    setRecipient(address);
     setLoading(true);
+
     const fetched = await fetchNFTs(address);
     setNfts(fetched);
+
+    const ok = validateRequired(fetched);
+    setHasRequiredTokens(ok);
+    if (!ok) {
+      alert(
+        `Te faltan estos Token IDs para mintear: ${missingIds.join(", ")}`
+      );
+    }
+
+    const bal = await balanceOf(address, 0);
+    setBalance(bal);
+
     setLoading(false);
   };
 
@@ -35,14 +62,20 @@ export default function Home() {
       alert("Primero conectá la wallet.");
       return;
     }
+    if (!hasRequiredTokens) {
+      alert("No cumples la condición de poseer los 10 NFTs del profe.");
+      return;
+    }
     if (!/^0x[a-fA-F0-9]{40}$/.test(recipient)) {
       alert("Dirección inválida.");
       return;
     }
+
     setLoading(true);
-    const success = await mint(recipient, 0, 1);
-    if (success) {
-      await loadNFTs(walletAddress);
+    const newId = await mint(recipient, 1);
+    if (newId !== null) {
+      const fetched = await fetchNFTs(walletAddress);
+      setNfts(fetched);
       const bal = await balanceOf(walletAddress, 0);
       setBalance(bal);
     }
@@ -68,7 +101,6 @@ export default function Home() {
             {walletAddress ? "Wallet Conectada" : "Conectar Wallet"}
           </button>
 
-          {/* Input para la dirección de destino */}
           <input
             type="text"
             placeholder="Dirección destinataria"
@@ -78,10 +110,16 @@ export default function Home() {
           />
         </div>
 
+        {!hasRequiredTokens && walletAddress && (
+          <p className="text-center text-red-500 mb-4">
+            Te faltan estos IDs para mintear: {missingIds.join(", ")}
+          </p>
+        )}
+
         <div className="flex justify-center mb-10">
           <button
             onClick={handleMint}
-            disabled={loading || !walletAddress}
+            disabled={loading || !walletAddress || !hasRequiredTokens}
             className="px-6 py-3 w-full sm:w-auto font-semibold text-white rounded-lg
                        bg-gradient-to-r from-[#6a11cb] to-[#2575fc]
                        hover:from-[#8e44ad] hover:to-[#2980b9]
@@ -97,7 +135,12 @@ export default function Home() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
           {nfts.length > 0 ? (
-            nfts.map((nft) => <NFTCard key={nft.tokenId} nft={nft} />)
+            nfts.map((nft) => (
+              <NFTCard
+                key={`${nft.contractAddress}-${nft.tokenId}`}
+                nft={nft}
+              />
+            ))
           ) : (
             !loading && (
               <p className="text-center text-gray-400 col-span-full">
