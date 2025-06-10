@@ -112,7 +112,7 @@ export default function Home() {
 
         {!hasRequiredTokens && walletAddress && (
           <p className="text-center text-red-500 mb-4">
-            Te faltan estos IDs para mintear: {missingIds.join(", ")}
+            Validaciones incorrectars para hacer el minteo: {missingIds.join(", ")}
           </p>
         )}
 

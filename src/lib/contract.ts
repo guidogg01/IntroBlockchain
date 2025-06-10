@@ -30,7 +30,6 @@ const CLASS_ABI = [
 //
 const ERC1155_CONTRACT_ADDRESS = "0xe3Dc6ab415D10a1B8bd817057B0Dd58396d37F55";
 const ERC1155_ABI = [
-  // lector del próximo ID
   {
     inputs: [],
     name: "nextTokenId",
@@ -38,7 +37,6 @@ const ERC1155_ABI = [
     stateMutability: "view",
     type: "function",
   },
-  // mintNew como antes
   {
     inputs: [
       { internalType: "address", name: "to", type: "address" },
@@ -50,7 +48,6 @@ const ERC1155_ABI = [
     stateMutability: "nonpayable",
     type: "function",
   },
-  // balanceOf y uri
   {
     inputs: [
       { internalType: "address", name: "account", type: "address" },
@@ -106,6 +103,7 @@ export async function getClaseData(tokenId: string) {
 
 /**
  * Mintea un NFT con ID incremental, leyendo antes nextTokenId.
+ * Ahora también muestra el hash de la tx en una alerta.
  * @returns newId si minteó OK, o null si falló.
  */
 export async function mint(
@@ -122,13 +120,15 @@ export async function mint(
   const nextIdBN = await erc1155Contract.nextTokenId();
   const nextId = Number(nextIdBN);
 
-  // 2) lanzo la tx
+  // 2) lanzo la tx y muestro su hash
   const tx: TransactionResponse = await erc1155Contract.mintNew(
     to,
     amount,
     data
   );
-  alert("Transacción enviada. Esperá la confirmación…");
+  alert(`Transacción enviada\nHash: ${tx.hash}\nEspera confirmación...`);
+
+  // 3) espero la confirmación
   await tx.wait();
 
   alert(`Mint exitoso! Token ID: ${nextId}`);
