@@ -1,16 +1,12 @@
 /* src/app/globals.css */
-
-/* ——— Importa Tailwind completo (CSS-first) ——— */
 @import "tailwindcss";
 
-/* ——— Tus estilos custom ——— */
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* estilos por defecto */
+body {
+  @apply bg-white text-black;
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* cuando haya .dark en <html> */
+.dark body {
+  @apply bg-gray-900 text-gray-100;
 }
