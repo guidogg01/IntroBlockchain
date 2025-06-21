@@ -174,7 +174,7 @@ export default function Home() {
       setLoading(false);
     };
 
-     return (
+    return (
       <>
         <main className="min-h-screen py-12 px-4 sm:px-8">
           <div className="max-w-5xl mx-auto">
@@ -274,22 +274,25 @@ export default function Home() {
                 <p>Cada NFT solo fue transferido una vez ✔️</p>
               </div>
             )}
-
-          <div className="flex justify-center mb-10">
-          <button
-            onClick={handleMint}
-            disabled={
-              loading ||
-              !walletAddress ||
-              !hasRequiredTokens ||
-              allMintedBeforeDate === false ||
-              singleTransferOnly === false
-            }
-            className="px-6 py-3 w-full sm:w-auto font-semibold text-white rounded-lg bg-gradient-to-r from-[#6a11cb] to-[#2575fc] hover:from-[#8e44ad] hover:to-[#2980b9] transition transform hover:-translate-y-1 disabled:opacity-50"
-          >
-            Generar NFT
-          </button>
-         </div>
+    
+            {/* Botón de mint */}
+            <div className="flex justify-center mb-10">
+              <button
+                onClick={handleMint}
+                disabled={
+                  loading ||
+                  !walletAddress ||
+                  !hasRequiredTokens ||
+                  allMintedBeforeDate === false ||
+                  singleTransferOnly === false
+                }
+                className="px-6 py-3 w-full sm:w-auto font-semibold text-white rounded-lg
+                           bg-gradient-to-r from-[#6a11cb] to-[#2575fc] hover:from-[#8e44ad] hover:to-[#2980b9]
+                           transition transform hover:-translate-y-1 disabled:opacity-50"
+              >
+                Generar NFT
+              </button>
+            </div>
     
             {/* Skeleton Loader */}
             {loading && nfts.length === 0 && (
@@ -337,5 +340,6 @@ export default function Home() {
         </main>
       </>
     );
+    
     
 }

@@ -3,7 +3,6 @@ import {
   BrowserProvider,
   Contract,
   type JsonRpcSigner,
-  type BigNumberish,
   type TransactionResponse,
 } from "ethers";
 
@@ -26,7 +25,7 @@ const CLASS_ABI = [
 ];
 
 //
-// 2) Tu ERC-1155 desplegado con nextTokenId + mintNew
+// 2) Tu ERC-1155 desplegado con nextTokenId + mintNew + balanceOf
 //
 const ERC1155_CONTRACT_ADDRESS = "0xe3Dc6ab415D10a1B8bd817057B0Dd58396d37F55";
 const ERC1155_ABI = [
@@ -67,6 +66,24 @@ const ERC1155_ABI = [
   },
 ];
 
+//
+// 3) ABI solo para el evento TransferSingle
+//
+const TRANSFER_SINGLE_EVENT_ABI = [
+  {
+    anonymous: false,
+    inputs: [
+      { indexed: true, internalType: "address", name: "operator", type: "address" },
+      { indexed: true, internalType: "address", name: "from",     type: "address" },
+      { indexed: true, internalType: "address", name: "to",       type: "address" },
+      { indexed: false, internalType: "uint256", name: "id",       type: "uint256" },
+      { indexed: false, internalType: "uint256", name: "value",    type: "uint256" },
+    ],
+    name: "TransferSingle",
+    type: "event",
+  },
+];
+
 export let provider: BrowserProvider;
 export let signer: JsonRpcSigner;
 export let classContract: Contract;
@@ -82,11 +99,7 @@ export async function connectWallet(): Promise<string | null> {
   signer = await provider.getSigner();
 
   classContract = new Contract(CLASS_CONTRACT_ADDRESS, CLASS_ABI, signer);
-  erc1155Contract = new Contract(
-    ERC1155_CONTRACT_ADDRESS,
-    ERC1155_ABI,
-    signer
-  );
+  erc1155Contract = new Contract(ERC1155_CONTRACT_ADDRESS, ERC1155_ABI, signer);
 
   return await signer.getAddress();
 }
@@ -102,10 +115,43 @@ export async function getClaseData(tokenId: string) {
 }
 
 /**
- * Mintea un NFT con ID incremental, leyendo antes nextTokenId.
- * Ahora también muestra el hash de la tx en una alerta.
- * @returns newId si minteó OK, o null si falló.
+ * Obtiene la fecha de minteo (TransferSingle from=zero) de un token ERC-1155.
  */
+export async function getMintDate(tokenId: string): Promise<Date | null> {
+  if (!provider) return null;
+
+  // Creamos un contrato ligero sólo con el ABI del evento
+  const evtContract = new Contract(
+    ERC1155_CONTRACT_ADDRESS,
+    TRANSFER_SINGLE_EVENT_ABI,
+    provider
+  );
+
+  const zero = "0x0000000000000000000000000000000000000000";
+
+  // Traemos todos los TransferSingle desde el block 0
+  const events = await evtContract.queryFilter(
+    evtContract.filters.TransferSingle(null, zero, null),
+    0,
+    "latest"
+  ) as any[];
+
+  // Buscamos el primero que coincida con nuestro tokenId
+  const ev = events.find(e => {
+    const idArg = e.args?.id;
+    const num = typeof idArg.toNumber === "function"
+      ? idArg.toNumber()
+      : Number(idArg);
+    return num.toString() === tokenId.toString();
+  });
+  if (!ev) return null;
+
+  const blk = await provider.getBlock(ev.blockNumber);
+  if (!blk) return null;
+
+  return new Date(blk.timestamp * 1000);
+}
+
 export async function mint(
   to: string,
   amount: number = 1,
@@ -115,22 +161,16 @@ export async function mint(
     alert("Conectá tu wallet antes de mintear.");
     return null;
   }
-
-  // 1) leo el próximo ID
   const nextIdBN = await erc1155Contract.nextTokenId();
   const nextId = Number(nextIdBN);
 
-  // 2) lanzo la tx y muestro su hash
   const tx: TransactionResponse = await erc1155Contract.mintNew(
     to,
     amount,
     data
   );
   alert(`Transacción enviada\nHash: ${tx.hash}\nEspera confirmación...`);
-
-  // 3) espero la confirmación
   await tx.wait();
-
   alert(`Mint exitoso! Token ID: ${nextId}`);
   return nextId;
 }

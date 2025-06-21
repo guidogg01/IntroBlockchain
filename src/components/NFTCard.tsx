@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from "react";
 import { NFTData } from "@/lib/alchemy";
-import { getClaseData } from "@/lib/contract";
+import { getClaseData, getMintDate } from "@/lib/contract";
 
 // Direcciones de contrato
 const PROFESSOR_CONTRACT = "0x1fee62d24daa9fc0a18341b582937be1d837f91d";
@@ -20,19 +20,22 @@ export default function NFTCard({ nft }: Props) {
     alumno: string;
   } | null>(null);
 
+  const [mintDate, setMintDate] = useState<Date | null>(null);
+
   useEffect(() => {
-    // Solo pedimos datosDeClases si viene del contrato del profe
-    if (
-      nft.contractAddress.toLowerCase() ===
-      PROFESSOR_CONTRACT.toLowerCase()
-    ) {
-      getClaseData(nft.tokenId).then((res) => {
+    // Si viene del contrato del profe, pedimos datosDeClases
+    if (nft.contractAddress.toLowerCase() === PROFESSOR_CONTRACT.toLowerCase()) {
+      getClaseData(nft.tokenId).then(res => {
         if (res) setDatosClase(res);
       });
     } else {
-      // Limpio por si venía otro dato
       setDatosClase(null);
     }
+
+    // Siempre intentamos leer la fecha de minteo
+    getMintDate(nft.tokenId).then(d => {
+      if (d) setMintDate(d);
+    });
   }, [nft.contractAddress, nft.tokenId]);
 
   return (
@@ -46,6 +49,7 @@ export default function NFTCard({ nft }: Props) {
           className="w-full h-52 object-cover rounded-md border mb-4"
         />
       )}
+
       <h3 className="text-2xl font-bold text-[#34495e] mb-2">
         {nft.name || "Sin nombre"}
       </h3>
@@ -59,9 +63,7 @@ export default function NFTCard({ nft }: Props) {
         <strong>Token ID:</strong> {nft.tokenId}
       </p>
 
-      {nft.contractAddress.toLowerCase() ===
-      PROFESSOR_CONTRACT.toLowerCase() ? (
-        // — NFT del profe: muestro clase/tema/alumno
+      {nft.contractAddress.toLowerCase() === PROFESSOR_CONTRACT.toLowerCase() ? (
         datosClase ? (
           <div className="bg-[#d7e3fc] rounded-md p-4 text-[#2c3e50]">
             <p><strong>Clase:</strong> {datosClase.clase}</p>
@@ -69,17 +71,16 @@ export default function NFTCard({ nft }: Props) {
             <p><strong>Alumno:</strong> {datosClase.alumno}</p>
           </div>
         ) : (
-          <p className="text-sm text-gray-400">Cargando datos on-chain...</p>
+          <p className="text-sm text-gray-400">Cargando datos on-chain…</p>
         )
-      ) : nft.contractAddress.toLowerCase() ===
-        MY_CONTRACT.toLowerCase() ? (
-        // — NFT tuyo: muestro otros atributos
-        <div className="bg-[#fcf5f7] rounded-md p-4 text-[#2c3e50]">
+      ) : nft.contractAddress.toLowerCase() === MY_CONTRACT.toLowerCase() ? (
+        <div className="bg-[#fcf5f7] rounded-md p-4 text-[#2c3e50] space-y-2">
           <p><strong>Origen:</strong> {nft.contractAddress}</p>
-          <p>
-  <strong>Fecha mint:</strong>{" "}
-  {new Date().toLocaleDateString()}
-</p>
+          {mintDate ? (
+            <p><strong>Fecha mint:</strong> {mintDate.toLocaleDateString()}</p>
+          ) : (
+            <p className="text-sm text-gray-400">Cargando fecha de minteo…</p>
+          )}
           <p><strong>Alumno:</strong> Guido Greco</p>
         </div>
       ) : null}
