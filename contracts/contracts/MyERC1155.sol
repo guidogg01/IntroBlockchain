@@ -18,12 +18,13 @@ contract MyERC1155 is ERC1155, Ownable {
     }
 
     function mintNew(
-        address to,
-        uint256 amount,
-        bytes calldata data
-    ) external onlyOwner returns (uint256 newId) {
-        newId = _currentTokenId;
-        _currentTokenId += 1;
-        _mint(to, newId, amount, data);
-    }
+    address to,
+    uint256 amount,
+    bytes calldata data
+) external returns (uint256 newId) {
+    newId = _currentTokenId;
+    _currentTokenId += 1;
+    _mint(to, newId, amount, data);
+}
+
 }
