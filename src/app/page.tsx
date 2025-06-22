@@ -6,6 +6,8 @@ import { fetchNFTs, NFTData } from "@/lib/alchemy";
 import NFTCard from "@/components/NFTCard";
 import Loadings from "@/components/Loading";
 import { Contract, toUtf8Bytes, hexlify } from "ethers";
+import { motion } from "framer-motion";
+import confetti from 'canvas-confetti';
 
 
 const PROFESSOR_CONTRACT = "0x1fee62d24daa9fc0a18341b582937be1d837f91d";
@@ -208,6 +210,14 @@ export default function Home() {
   }
   setLoading(false);
 
+  if (newId !== null) {
+    confetti({
+      particleCount: 100,
+      spread: 70,
+      origin: { y: 0.6 }
+    });
+  }
+
   };
   
 
@@ -215,13 +225,28 @@ export default function Home() {
   const handleSendPromotion = async () => {
     if (!walletAddress) return alert("Conéctate primero.");
     if (!hasPromoToken) return alert("No tienes el NFT de promoción.");
-    if (!/^0x[a-fA-F0-9]{40}$/.test(recipient)) return alert("Dirección inválida.");
+    if (!pendingAlumnoName.trim()) return alert("Por favor ingresa el nombre del alumno.");
   
     setLoading(true);
-    await mint(recipient, 1);
+    // convertimos el nombre a bytes UTF-8
+    const dataBytes = hexlify(toUtf8Bytes(pendingAlumnoName.trim()));
+    // hacemos el mint promocional incluyendo el nombre
+    const newId = await mint(recipient, 1, dataBytes);
     setLoading(false);
-    alert("🚀 Promoción enviada!");
+  
+    if (newId !== null) {
+      // guardamos localmente el nombre para este token
+      setAlumnoNames(prev => ({
+        ...prev,
+        [newId.toString()]: pendingAlumnoName.trim()
+      }));
+      setPendingAlumnoName("");
+  
+      confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
+      alert("🚀 Promoción enviada!");
+    }
   };
+  
   
 
   // Filtrado en vivo
@@ -343,33 +368,35 @@ export default function Home() {
 {/* ——— Botón Generar NFT (sólo admin + condiciones) ——— */}
 {walletAddress && (
   <div className="flex justify-center mb-6">
-    <button
-      onClick={handleMint}
-      disabled={
-        loading ||
-        (walletAddress.toLowerCase() === ADMIN_ADDRESS &&
-          (!hasRequiredTokens ||
-           allMintedBeforeDate === false ||
-           singleTransferOnly === false))
-      }
-      className={`
-        px-6 py-3 w-full sm:w-auto font-semibold text-white rounded-lg
-        bg-gradient-to-r from-[#6a11cb] to-[#2575fc]
-        hover:from-[#8e44ad] hover:to-[#2980b9]
-        transition transform hover:-translate-y-1
-        ${
-          (loading ||
-           (walletAddress.toLowerCase() === ADMIN_ADDRESS &&
-             (!hasRequiredTokens ||
-              allMintedBeforeDate === false ||
-              singleTransferOnly === false)))
-            ? "opacity-50 cursor-not-allowed"
-            : ""
-        }
-      `}
-    >
-      Generar NFT
-    </button>
+    <motion.button
+  onClick={handleMint}
+  disabled={
+    loading ||
+    (walletAddress.toLowerCase() === ADMIN_ADDRESS &&
+      (!hasRequiredTokens ||
+       allMintedBeforeDate === false ||
+       singleTransferOnly === false))
+  }
+  whileTap={{ scale: 0.95 }}
+  className={`
+    px-6 py-3 w-full sm:w-auto font-semibold text-white rounded-lg
+    bg-gradient-to-r from-[#6a11cb] to-[#2575fc]
+    hover:from-[#8e44ad] hover:to-[#2980b9]
+    transition transform hover:-translate-y-1
+    ${
+      (loading ||
+       (walletAddress.toLowerCase() === ADMIN_ADDRESS &&
+         (!hasRequiredTokens ||
+          allMintedBeforeDate === false ||
+          singleTransferOnly === false)))
+        ? "opacity-50 cursor-not-allowed"
+        : ""
+    }
+  `}
+>
+  Generar NFT
+</motion.button>
+
   </div>
 )}
 
@@ -410,16 +437,15 @@ export default function Home() {
 
           {/* Grid de NFTs */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-  {displayed.length > 0 ? (
-    displayed.map(nft => (
-      <NFTCard
-        key={`${nft.contractAddress}-${nft.tokenId}`}
-        nft={nft}
-        alumnoName={alumnoNames[nft.tokenId]}
-      />
-
-    ))
-  ) : (
+            {displayed.length > 0 ? (
+              displayed.map(nft => (
+                <NFTCard
+                  key={`${nft.contractAddress}-${nft.tokenId}`}
+                  nft={nft}
+                  alumnoName={alumnoNames[nft.tokenId]}
+                />
+              ))
+            ) : (
               !loading && (
                 <p className="text-center text-gray-400 dark:text-gray-500 col-span-full">
                   No se encontraron NFTs para esta wallet.
