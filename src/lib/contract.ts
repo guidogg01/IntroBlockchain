@@ -27,7 +27,7 @@ const CLASS_ABI = [
 //
 // 2) Tu ERC-1155 desplegado con nextTokenId + mintNew + balanceOf
 //
-const ERC1155_CONTRACT_ADDRESS = "0xfbc66BD5309017845035D25D2905dD8F5F11d6F9";
+const ERC1155_CONTRACT_ADDRESS = "0x9d22cA37e4Cc5bBed83CF9f24C90F86A3D2A7849";
 const ERC1155_ABI = [
   {
     inputs: [],

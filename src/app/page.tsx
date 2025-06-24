@@ -12,7 +12,7 @@ import confetti from 'canvas-confetti';
 
 const PROFESSOR_CONTRACT = "0x1fee62d24daa9fc0a18341b582937be1d837f91d";
 const ADMIN_ADDRESS = "0xdC9a1c08BF68571eD4990eC7B6De0A8fe77f09C6".toLowerCase();
-const MY_CONTRACT        = "0xfbc66BD5309017845035D25D2905dD8F5F11d6F9";
+const MY_CONTRACT        = "0x9d22cA37e4Cc5bBed83CF9f24C90F86A3D2A7849";
 const REQUIRED_TOKEN_IDS = [6, 14, 22, 31, 45, 46, 59, 60, 73, 80];
 const CUTOFF_TIMESTAMP = Math.floor(
   new Date("2025-05-28T00:00:00Z").getTime() / 1000

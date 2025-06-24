@@ -8,7 +8,7 @@ import { Contract } from "ethers";
 import { toUtf8String } from "ethers";
 
 const PROFESSOR_CONTRACT = "0x1fee62d24daa9fc0a18341b582937be1d837f91d";
-const MY_CONTRACT        = "0xfbc66BD5309017845035D25D2905dD8F5F11d6F9";
+const MY_CONTRACT        = "0x9d22cA37e4Cc5bBed83CF9f24C90F86A3D2A7849";
 
 const TRANSFER_EVENT_ABI = [
   {
@@ -23,6 +23,13 @@ const TRANSFER_EVENT_ABI = [
     ],
     name: "TransferSingle",
     type: "event",
+  },
+  {
+    inputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+    name: "nombreAlumno",
+    outputs: [{ internalType: "string", name: "", type: "string" }],
+    stateMutability: "view",
+    type: "function",
   },
 ];
 
@@ -64,29 +71,35 @@ export default function NFTCard({ nft, alumnoName }: Props) {
       nft.contractAddress.toLowerCase() === MY_CONTRACT.toLowerCase() &&
       provider
     ) {
-      (async () => {
-        try {
-          const zero = "0x0000000000000000000000000000000000000000";
-          const contract = new Contract(MY_CONTRACT, TRANSFER_EVENT_ABI, provider);
+      const c = new Contract(MY_CONTRACT, TRANSFER_EVENT_ABI, provider);
 
-          // filtrar el mint de este tokenId
-          const filter = contract.filters.TransferSingle(
-            null,       // cualquier operador
-            zero,       // desde AddressZero
-            null,       // a cualquier to
-            nft.tokenId // exactamente este token
-          );
-          const events = await contract.queryFilter(filter, 0, "latest");
-          if (events.length > 0) {
-            const evt: any = events[0];
-            const dataBytes: string = evt.args.data;
-            const texto = toUtf8String(dataBytes);
-            setAlumnoInput(texto);
-          }
-        } catch {
-          // ignoro si falla (RPC, parsing, etc)
-        }
-      })();
+      // intentamos leer el nombre directamente de storage
+      c.nombreAlumno(nft.tokenId)
+       .then((s: string) => {
+         if (s.trim()) {
+           setAlumnoInput(s);
+         } else {
+           // si devuelve vacío, entonces caemos al fallback de evento
+           throw new Error("sin nombre en storage");
+         }
+       })
+       .catch(async () => {
+         // fallback: parsear el evento TransferSingle
+         try {
+           const zero = "0x0000000000000000000000000000000000000000";
+           const filter = c.filters.TransferSingle(
+             null, zero, null, nft.tokenId
+           );
+           const events = await c.queryFilter(filter, 0, "latest");
+           if (events.length > 0) {
+             const dataBytes: string = (events[0] as any).args.data;
+             const texto = toUtf8String(dataBytes);
+             setAlumnoInput(texto);
+           }
+         } catch {
+           // ignoro errores de RPC/parsing
+         }
+       });
     }
   }, [nft.contractAddress, nft.tokenId, alumnoName]);
 
@@ -138,9 +151,9 @@ export default function NFTCard({ nft, alumnoName }: Props) {
             <p className="text-sm text-gray-400">Cargando fecha de mint…</p>
           )}
           <p>
-            <strong>Alumno:</strong>{" "}
-            {alumnoInput.trim() !== "" ? alumnoInput : "—"}
-          </p>
+        <strong>Alumno:</strong>{" "}
+        {alumnoInput.trim() || "—"}
+      </p>
         </div>
       ) : null}
     </div>
