@@ -131,7 +131,7 @@ export default function NFTCard({ nft, alumnoName }: Props) {
       /** — Caso tu contrato: usamos el nombre almacenado en el evento — **/
       nft.contractAddress.toLowerCase() === MY_CONTRACT.toLowerCase() ? (
         <div className="bg-[#fcf5f7] rounded-md p-4 text-[#2c3e50] space-y-2">
-          <p><strong>Origen:</strong> {nft.contractAddress}</p>
+          <p><strong>Origen:</strong> {"0xdC9a1c08BF68571eD4990eC7B6De0A8fe77f09C6"}</p>
           {mintDate ? (
             <p><strong>Fecha mint:</strong> {mintDate.toLocaleDateString()}</p>
           ) : (
