@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { connectWallet, mint, balanceOf, provider } from "@/lib/contract";
+import { ERC1155_ABI, connectWallet, mint, promote, balanceOf, provider } from "@/lib/contract";
 import { fetchNFTs, NFTData } from "@/lib/alchemy";
 import NFTCard from "@/components/NFTCard";
 import Loadings from "@/components/Loading";
@@ -12,7 +12,7 @@ import confetti from 'canvas-confetti';
 
 const PROFESSOR_CONTRACT = "0x1fee62d24daa9fc0a18341b582937be1d837f91d";
 const ADMIN_ADDRESS = "0xdC9a1c08BF68571eD4990eC7B6De0A8fe77f09C6".toLowerCase();
-const MY_CONTRACT        = "0x9d22cA37e4Cc5bBed83CF9f24C90F86A3D2A7849";
+const MY_CONTRACT        = "0x4CB8FB803f177270831D47fce9bd2D30aC1efBfA";
 const REQUIRED_TOKEN_IDS = [6, 14, 22, 31, 45, 46, 59, 60, 73, 80];
 const CUTOFF_TIMESTAMP = Math.floor(
   new Date("2025-05-28T00:00:00Z").getTime() / 1000
@@ -42,11 +42,17 @@ export default function Home() {
   const [balance, setBalance]                         = useState<string | null>(null);
   const [recipient, setRecipient]                     = useState<string>("");
   const [alumnoNames, setAlumnoNames]                 = useState<Record<string, string>>({});
+  const [descriptionMap, setDescriptionMap]           = useState<Record<string,string>>({});
+  const [tituloMap, setTituloMap]                     = useState<Record<string,string>>({});
   const [pendingAlumnoName, setPendingAlumnoName]     = useState("");
+  const [pendingDescription, setPendingDescription]   = useState("");
+  const [pendingTitle, setPendingTitle] = useState("");
   const [hasRequiredTokens, setHasRequiredTokens]     = useState(false);
   const [missingIds, setMissingIds]                   = useState<number[]>([]);
   const [allMintedBeforeDate, setAllMintedBeforeDate] = useState<boolean | null>(null);
   const [singleTransferOnly, setSingleTransferOnly]   = useState<boolean | null>(null);
+  const [originMap, setOriginMap] = useState<Record<string,string>>({});
+  const [promoUsedOnChain, setPromoUsedOnChain] = useState<boolean>(false);
 
   // Nuevo estado para la promo
   const [hasPromoToken, setHasPromoToken]             = useState<boolean>(false);
@@ -105,6 +111,8 @@ export default function Home() {
     return true;
   }
 
+  
+
   const handleConnect = async () => {
     const address = await connectWallet();
     if (!address) return;
@@ -161,93 +169,155 @@ export default function Home() {
     setLoading(false);
   };
 
-   const handleMint = async () => {
-    // 1) validaciones generales
+  const handleMint = async () => {
+    
     if (!walletAddress) {
       return alert("Primero conectá la wallet.");
     }
     if (!/^0x[a-fA-F0-9]{40}$/.test(recipient)) {
       return alert("Dirección inválida.");
     }
-    // 2) si es admin, chequeo sus 3 condiciones
-    if (walletAddress.toLowerCase() === ADMIN_ADDRESS) {
-      if (!hasRequiredTokens) {
-        return alert("Admin: te faltan los 10 NFTs del profe.");
-      }
-      if (allMintedBeforeDate === false) {
-        return alert("Admin: alguno de los NFTs fue mintado después del 28 May 2025.");
-      }
-      if (singleTransferOnly === false) {
-        return alert("Admin: alguno de los NFTs fue transferido más de una vez.");
-      }
+  
+    if (!hasRequiredTokens || allMintedBeforeDate === false || singleTransferOnly === false) {
+      return;
     }
-    // 3) validación del input alumnoName
+  
+    // 2) validación de inputs
     if (!pendingAlumnoName.trim()) {
       return alert("Por favor ingresa el nombre del alumno.");
     }
-
-    // 4) todo OK → minteo
+    if (!pendingTitle.trim()) {
+      return alert("Por favor ingresa un título.");
+    }
+    if (!pendingDescription.trim()) {
+      return alert("Por favor ingresa una descripción.");
+    }
   
-  setLoading(true);
-  // 4.1) convertimos el nombre a bytes UTF-8
-  const dataBytes = hexlify(toUtf8Bytes(pendingAlumnoName));
-  // 4.2) lanzamos el mint con los datos
-  const newId = await mint(recipient, 1, dataBytes);
-  if (newId !== null && walletAddress) {
-    // 4.3) guardamos el nombre SOLO para este token recién minteado
-    setAlumnoNames(prev => ({
-      ...prev,
-      [newId.toString()]: pendingAlumnoName.trim()
-    }));
-    // 4.4) limpiamos el input
-    setPendingAlumnoName("");
+    setLoading(true);
+  
+    // 3) convertimos cada campo a bytes hex
+    const dataBytes        = hexlify(toUtf8Bytes(pendingAlumnoName.trim()));
+    const titleBytes       = hexlify(toUtf8Bytes(pendingTitle.trim()));
+    const descriptionText  = pendingDescription.trim();
+  
+    // 4) mint: ahora con 5 argumentos
+    const newId = await mint(
+      recipient,
+      1,
+      dataBytes,
+      titleBytes,
+      descriptionText
+    );
+  
+    if (newId !== null && walletAddress) {
+      // 5) guardamos localmente los maps para renderizar en la UI
+      setAlumnoNames(prev => ({
+        ...prev,
+        [newId.toString()]: pendingAlumnoName.trim(),
+      }));
+      setTituloMap(prev => ({
+        ...prev,
+        [newId.toString()]: pendingTitle.trim(),
+      }));
+      setDescriptionMap(prev => ({
+        ...prev,
+        [newId.toString()]: pendingDescription.trim(),
+      }));
 
-    // 4.5) refrescamos lista y balance
-    const refreshed = await fetchNFTs(walletAddress);
-    setNfts(refreshed);
-    const bal = await balanceOf(walletAddress, 0);
-    setBalance(bal);
-  }
-  setLoading(false);
-
-  if (newId !== null) {
-    confetti({
-      particleCount: 100,
-      spread: 70,
-      origin: { y: 0.6 }
-    });
-  }
-
+      setOriginMap(m => ({ ...m, [newId]: walletAddress! }));
+  
+      // 6) limpiamos los inputs
+      setPendingAlumnoName("");
+      setPendingTitle("");
+      setPendingDescription("");
+  
+      // 7) refrescamos la lista de NFTs y balance
+      const refreshed = await fetchNFTs(walletAddress);
+      setNfts(refreshed);
+      const bal = await balanceOf(walletAddress, 0);
+      setBalance(bal);
+  
+      // 8) animación de confetti
+      confetti({
+        particleCount: 100,
+        spread: 70,
+        origin: { y: 0.6 },
+      });
+    }
+  
+    setLoading(false);
   };
+  
   
 
   // Nuevo handler para promoción
   const handleSendPromotion = async () => {
+
     if (!walletAddress) return alert("Conéctate primero.");
     if (!hasPromoToken) return alert("No tienes el NFT de promoción.");
     if (!pendingAlumnoName.trim()) return alert("Por favor ingresa el nombre del alumno.");
   
     setLoading(true);
     // convertimos el nombre a bytes UTF-8
-    const dataBytes = hexlify(toUtf8Bytes(pendingAlumnoName.trim()));
-    // hacemos el mint promocional incluyendo el nombre
-    const newId = await mint(recipient, 1, dataBytes);
+    const dataBytes        = hexlify(toUtf8Bytes(pendingAlumnoName.trim()));
+    const titleBytes       = hexlify(toUtf8Bytes(pendingTitle.trim()));
+    const descriptionText  = pendingDescription.trim();
+  
+    // 4) mint: ahora con 5 argumentos
+    const newId = await promote(
+      recipient,
+      1,
+      dataBytes,
+      titleBytes,
+      descriptionText
+    );
     setLoading(false);
   
-    if (newId !== null) {
-      // guardamos localmente el nombre para este token
+    if (newId !== null && walletAddress) {
+      // 5) guardamos localmente los maps para renderizar en la UI
       setAlumnoNames(prev => ({
         ...prev,
-        [newId.toString()]: pendingAlumnoName.trim()
+        [newId.toString()]: pendingAlumnoName.trim(),
       }));
+      setTituloMap(prev => ({
+        ...prev,
+        [newId.toString()]: pendingTitle.trim(),
+      }));
+      setDescriptionMap(prev => ({
+        ...prev,
+        [newId.toString()]: pendingDescription.trim(),
+      }));
+
+      setOriginMap(m => ({ ...m, [newId]: walletAddress! }));
+      
       setPendingAlumnoName("");
-  
+      setPendingTitle("");
+      setPendingDescription("");
+
+      const refreshed = await fetchNFTs(walletAddress);
+      setNfts(refreshed);
+      const bal = await balanceOf(walletAddress, 0);
+      setBalance(bal);
+
       confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
       alert("🚀 Promoción enviada!");
+
+      try {
+        const c = new Contract(MY_CONTRACT, ERC1155_ABI, provider);
+        const used = await c.hasPromoted(walletAddress);
+        console.log("🔍 hasPromoted on-chain:", used);
+        setPromoUsedOnChain(used);
+      } catch (err) {
+        console.error("No pude leer hasPromoted después de mint:", err);
+      }
     }
   };
   
-  
+  const validationMessages: string[] = [];
+    if (!hasRequiredTokens) validationMessages.push("❌ Faltan los 10 NFTs de los profesores.");
+    if (allMintedBeforeDate === false) validationMessages.push("❌ Algún NFT fue mintado después del 28/05/2025.");
+    if (singleTransferOnly === false) validationMessages.push("❌ Algún NFT fue transferido más de una vez.");
+
 
   // Filtrado en vivo
   const displayed = nfts.filter(nft =>
@@ -344,9 +414,42 @@ export default function Home() {
             </div>
           )}
 
-          {/* Mensajes de estado */}
-          {/* Sólo para admin: mensajes de validación */}
-{/* … justo antes de tu sección “——— Botón Generar NFT” … */}
+         
+          {walletAddress && (
+  <div className="mb-4 flex justify-center">
+    <input
+      type="text"
+      placeholder="Ingresa un título para el NFT"
+      value={pendingTitle}
+      onChange={e => setPendingTitle(e.target.value)}
+      className="
+        px-4 py-2 w-full sm:w-72
+        border border-gray-300 dark:border-gray-600 rounded-lg
+        bg-white dark:bg-gray-800
+        text-gray-800 dark:text-gray-200
+        focus:outline-none focus:ring-2 focus:ring-indigo-400
+      "
+    />
+  </div>
+)}
+{walletAddress && (
+  <div className="mb-4 flex justify-center">
+    <input
+      type="text"
+      placeholder="Ingresa una descripción para el NFT"
+      value={pendingDescription}
+      onChange={e => setPendingDescription(e.target.value)}
+      className="
+        px-4 py-2 w-full sm:w-72
+        border border-gray-300 dark:border-gray-600 rounded-lg
+        bg-white dark:bg-gray-800
+        text-gray-800 dark:text-gray-200
+        focus:outline-none focus:ring-2 focus:ring-indigo-400
+      "
+    />
+  </div>
+)}
+
 {walletAddress && (
   <div className="mb-4 flex justify-center">
     <input
@@ -366,49 +469,47 @@ export default function Home() {
 )}
 
 {/* ——— Botón Generar NFT (sólo admin + condiciones) ——— */}
-{walletAddress && (
-  <div className="flex justify-center mb-6">
-    <motion.button
-  onClick={handleMint}
-  disabled={
-    loading ||
-    (walletAddress.toLowerCase() === ADMIN_ADDRESS &&
-      (!hasRequiredTokens ||
-       allMintedBeforeDate === false ||
-       singleTransferOnly === false))
-  }
-  whileTap={{ scale: 0.95 }}
-  className={`
-    px-6 py-3 w-full sm:w-auto font-semibold text-white rounded-lg
-    bg-gradient-to-r from-[#6a11cb] to-[#2575fc]
-    hover:from-[#8e44ad] hover:to-[#2980b9]
-    transition transform hover:-translate-y-1
-    ${
-      (loading ||
-       (walletAddress.toLowerCase() === ADMIN_ADDRESS &&
-         (!hasRequiredTokens ||
-          allMintedBeforeDate === false ||
-          singleTransferOnly === false)))
-        ? "opacity-50 cursor-not-allowed"
-        : ""
-    }
-  `}
->
-  Generar NFT
-</motion.button>
+{/* — Mensajes de validación — */}
+{walletAddress && validationMessages.length > 0 && (
+          <div className="mb-4 p-4 bg-red-100 border border-red-300 text-red-700 rounded">
+            {validationMessages.map((msg, i) => (
+              <p key={i}>{msg}</p>
+            ))}
+          </div>
+        )}
 
-  </div>
-)}
+        {walletAddress && (
+          <div className="flex justify-center mb-6">
+            <motion.button
+              onClick={handleMint}
+              disabled={
+                loading ||
+                (walletAddress.toLowerCase() === ADMIN_ADDRESS && validationMessages.length > 0)
+              }
+              whileTap={{ scale: 0.95 }}
+              className={`
+                px-6 py-3 w-full sm:w-auto font-semibold text-white rounded-lg
+                bg-gradient-to-r from-[#6a11cb] to-[#2575fc]
+                hover:from-[#8e44ad] hover:to-[#2980b9]
+                transition transform hover:-translate-y-1
+                ${(loading || validationMessages.length > 0)
+                  ? "opacity-50 cursor-not-allowed"
+                  : ""}
+              `}
+            >
+              Generar NFT
+            </motion.button>
+          </div>
+        )}
 
-{/* ─── Botón Enviar Promoción 💣 ─── */}
-{walletAddress && (
+          {walletAddress && (
             <div className="flex justify-center mb-6">
               <button
                 onClick={handleSendPromotion}
-                disabled={loading || !hasPromoToken}
+                disabled={loading || !hasPromoToken || promoUsedOnChain}
                 className={`
                   px-6 py-3 bg-red-500 text-white rounded-lg hover:bg-red-600 transition
-                  ${loading || !hasPromoToken ? "opacity-50 cursor-not-allowed" : ""}
+                  ${(loading || !hasPromoToken || promoUsedOnChain) ? "opacity-50 cursor-not-allowed" : ""}
                 `}
               >
                 💣 Enviar Promoción
@@ -416,9 +517,6 @@ export default function Home() {
             </div>
           )}
 
-
-
-          {/* Skeleton Loader */}
           {loading && nfts.length === 0 && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 mb-6">
               {Array.from({ length: 6 }).map((_, i) => (
@@ -435,14 +533,12 @@ export default function Home() {
             </div>
           )}
 
-          {/* Grid de NFTs */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
             {displayed.length > 0 ? (
               displayed.map(nft => (
                 <NFTCard
                   key={`${nft.contractAddress}-${nft.tokenId}`}
                   nft={nft}
-                  alumnoName={alumnoNames[nft.tokenId]}
                 />
               ))
             ) : (
@@ -453,7 +549,6 @@ export default function Home() {
               )
             )}
           </div>
-          
         </div>
       </main>
     </>

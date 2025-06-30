@@ -3,49 +3,25 @@
 
 import { useEffect, useState } from "react";
 import { NFTData } from "@/lib/alchemy";
-import { getClaseData, getMintDate, provider } from "@/lib/contract";
+import { ERC1155_ABI, getClaseData, getMintDate, provider } from "@/lib/contract";
 import { Contract } from "ethers";
-import { toUtf8String } from "ethers";
 
 const PROFESSOR_CONTRACT = "0x1fee62d24daa9fc0a18341b582937be1d837f91d";
-const MY_CONTRACT        = "0x9d22cA37e4Cc5bBed83CF9f24C90F86A3D2A7849";
-
-const TRANSFER_EVENT_ABI = [
-  {
-    anonymous: false,
-    inputs: [
-      { indexed: true,  internalType: "address", name: "operator", type: "address" },
-      { indexed: true,  internalType: "address", name: "from",     type: "address" },
-      { indexed: true,  internalType: "address", name: "to",       type: "address" },
-      { indexed: false, internalType: "uint256", name: "id",       type: "uint256" },
-      { indexed: false, internalType: "uint256", name: "value",    type: "uint256" },
-      { indexed: false, internalType: "bytes",    name: "data",     type: "bytes" },
-    ],
-    name: "TransferSingle",
-    type: "event",
-  },
-  {
-    inputs: [{ internalType: "uint256", name: "", type: "uint256" }],
-    name: "nombreAlumno",
-    outputs: [{ internalType: "string", name: "", type: "string" }],
-    stateMutability: "view",
-    type: "function",
-  },
-];
+const MY_CONTRACT        = "0x4CB8FB803f177270831D47fce9bd2D30aC1efBfA"; 
 
 interface Props {
   nft: NFTData;
-  /** Nombre ingresado al momento de mintear (solo para tu contrato MY_CONTRACT) */
-  alumnoName?: string;
 }
 
-export default function NFTCard({ nft, alumnoName }: Props) {
+export default function NFTCard({ nft }: Props) {
   const [datosClase,  setDatosClase]  = useState<{ clase: string; tema: string; alumno: string } | null>(null);
   const [mintDate,    setMintDate]    = useState<Date | null>(null);
   const [alumnoInput, setAlumnoInput] = useState<string>("");
+  const [tituloOnChain, setTituloOnChain] = useState<string | null>(null);
+  const [descripcionOnChain, setDescripcionOnChain] = useState<string | null>(null);
+  const [originAddress, setOriginAddress] = useState<string | null>(null);
 
   useEffect(() => {
-    // 1) Si viene del contrato del profe, pedimos datosDeClases
     if (nft.contractAddress.toLowerCase() === PROFESSOR_CONTRACT.toLowerCase()) {
       getClaseData(nft.tokenId).then(res => {
         if (res) {
@@ -61,47 +37,29 @@ export default function NFTCard({ nft, alumnoName }: Props) {
       if (d) setMintDate(d);
     });
 
-    if (alumnoName) {
-      setAlumnoInput(alumnoName);
-      return;
-    }
-
-    // 3) Para nuestro contrato, extraemos el `data` del evento TransferSingle por tokenId
     if (
       nft.contractAddress.toLowerCase() === MY_CONTRACT.toLowerCase() &&
       provider
     ) {
-      const c = new Contract(MY_CONTRACT, TRANSFER_EVENT_ABI, provider);
+      const c = new Contract(MY_CONTRACT, ERC1155_ABI, provider);
 
-      // intentamos leer el nombre directamente de storage
-      c.nombreAlumno(nft.tokenId)
-       .then((s: string) => {
-         if (s.trim()) {
-           setAlumnoInput(s);
-         } else {
-           // si devuelve vacío, entonces caemos al fallback de evento
-           throw new Error("sin nombre en storage");
-         }
-       })
-       .catch(async () => {
-         // fallback: parsear el evento TransferSingle
-         try {
-           const zero = "0x0000000000000000000000000000000000000000";
-           const filter = c.filters.TransferSingle(
-             null, zero, null, nft.tokenId
-           );
-           const events = await c.queryFilter(filter, 0, "latest");
-           if (events.length > 0) {
-             const dataBytes: string = (events[0] as any).args.data;
-             const texto = toUtf8String(dataBytes);
-             setAlumnoInput(texto);
-           }
-         } catch {
-           // ignoro errores de RPC/parsing
-         }
-       });
+      Promise.all([
+        c.nombreAlumno(nft.tokenId),
+        c.tituloAlumno(nft.tokenId),
+        c.descripcionNFT(nft.tokenId),
+        c.originOf(nft.tokenId),
+      ])
+      .then(([nombre, titulo, descripcion, originAddress]: [string, string, string, string]) => {
+        if (nombre.trim())       setAlumnoInput(nombre);
+        if (titulo.trim())       setTituloOnChain(titulo);
+        if (descripcion.trim())  setDescripcionOnChain(descripcion);
+        setOriginAddress(originAddress);
+      })
+      .catch(err => {
+        console.error("Error leyendo metadata on-chain:", err);
+      });
     }
-  }, [nft.contractAddress, nft.tokenId, alumnoName]);
+  }, [nft.contractAddress, nft.tokenId]);
 
   return (
     <div className="bg-gradient-to-br from-[#f5f7fa] to-[#e4ebf1]
@@ -115,11 +73,14 @@ export default function NFTCard({ nft, alumnoName }: Props) {
         />
       )}
 
+      
       <h3 className="text-2xl font-bold text-[#34495e] mb-2">
-        {nft.name || "Sin nombre"}
+        {nft.contractAddress.toLowerCase() === PROFESSOR_CONTRACT.toLowerCase()
+          ? nft.name || "Sin nombre"
+          : tituloOnChain?.trim() ?? "Sin nombre"}
       </h3>
       <p className="text-[#2c3e50] mb-2">
-        <strong>Descripción:</strong> {nft.description}
+        <strong>{"Descripción:"}</strong> {descripcionOnChain?.trim() || nft.description}
       </p>
       <p className="text-[#2c3e50] mb-2">
         <strong>Contrato:</strong> {nft.contractAddress}
@@ -141,19 +102,20 @@ export default function NFTCard({ nft, alumnoName }: Props) {
         )
       ) : 
       
-      /** — Caso tu contrato: usamos el nombre almacenado en el evento — **/
       nft.contractAddress.toLowerCase() === MY_CONTRACT.toLowerCase() ? (
         <div className="bg-[#fcf5f7] rounded-md p-4 text-[#2c3e50] space-y-2">
-          <p><strong>Origen:</strong> {"0xdC9a1c08BF68571eD4990eC7B6De0A8fe77f09C6"}</p>
+          <p>
+            <strong>Origen:</strong> { originAddress ?? "—" }
+          </p>
           {mintDate ? (
             <p><strong>Fecha mint:</strong> {mintDate.toLocaleDateString()}</p>
           ) : (
             <p className="text-sm text-gray-400">Cargando fecha de mint…</p>
           )}
-          <p>
-        <strong>Alumno:</strong>{" "}
-        {alumnoInput.trim() || "—"}
-      </p>
+        <p>
+          <strong>Alumno:</strong>{" "}
+          {alumnoInput.trim() || "—"}
+       </p>
         </div>
       ) : null}
     </div>

@@ -6,9 +6,6 @@ import {
   type TransactionResponse,
 } from "ethers";
 
-//
-// 1) Contrato original (datosDeClases)
-//
 const CLASS_CONTRACT_ADDRESS = "0x1fee62d24daa9fc0a18341b582937be1d837f91d";
 const CLASS_ABI = [
   {
@@ -24,11 +21,86 @@ const CLASS_ABI = [
   },
 ];
 
-//
-// 2) Tu ERC-1155 desplegado con nextTokenId + mintNew + balanceOf
-//
-const ERC1155_CONTRACT_ADDRESS = "0x9d22cA37e4Cc5bBed83CF9f24C90F86A3D2A7849";
-const ERC1155_ABI = [
+const ERC1155_CONTRACT_ADDRESS = "0x4CB8FB803f177270831D47fce9bd2D30aC1efBfA";
+
+export const ERC1155_ABI = [
+
+  {
+    inputs: [],
+    name: "owner",
+    outputs: [{ internalType: "address", name: "", type: "address" }],
+    stateMutability: "view",
+    type: "function",
+  },
+
+  // —– getters on-chain —–
+  {
+    inputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+    name: "nombreAlumno",
+    outputs: [{ internalType: "string", name: "", type: "string" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+    name: "tituloAlumno",
+    outputs: [{ internalType: "string", name: "", type: "string" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+    name: "descripcionNFT",
+    outputs: [{ internalType: "string", name: "", type: "string" }],
+    stateMutability: "view",
+    type: "function",
+  },
+
+  {
+    inputs: [{ internalType: "address", name: "to", type: "address" }],
+    name: "hasPromoted",
+    outputs: [{ internalType: "bool", name: "", type: "bool" }],
+    stateMutability: "view",
+    type: "function",
+  },
+
+  {
+    inputs: [
+      { internalType: "address", name: "to",            type: "address" },
+      { internalType: "uint256", name: "amount",        type: "uint256" },
+      { internalType: "bytes",    name: "data",          type: "bytes"   },
+      { internalType: "bytes",    name: "titleData",     type: "bytes"   },
+      { internalType: "string",   name: "description",   type: "string" },
+    ],
+    name: "mintNew",
+    outputs: [{ internalType: "uint256", name: "newId", type: "uint256" }],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+
+  {
+    inputs: [
+      { internalType: "address", name: "to",          type: "address" },
+      { internalType: "uint256", name: "amount",      type: "uint256" },
+      { internalType: "bytes",   name: "data",        type: "bytes"   },
+      { internalType: "bytes",   name: "titleData",   type: "bytes"   },
+      { internalType: "string",  name: "description", type: "string" },
+    ],
+    name: "mintPromotion",
+    outputs: [{ internalType: "uint256", name: "newId", type: "uint256" }],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  
+  {
+    inputs: [{ internalType: "uint256", name: "tokenId", type: "uint256" }],
+    name: "originOf",
+    outputs: [{ internalType: "address", name: "", type: "address" }],
+    stateMutability: "view",
+    type: "function",
+  },
+
+  // —– el resto de tu ABI original —–
   {
     inputs: [],
     name: "nextTokenId",
@@ -38,19 +110,8 @@ const ERC1155_ABI = [
   },
   {
     inputs: [
-      { internalType: "address", name: "to", type: "address" },
-      { internalType: "uint256", name: "amount", type: "uint256" },
-      { internalType: "bytes", name: "data", type: "bytes" },
-    ],
-    name: "mintNew",
-    outputs: [{ internalType: "uint256", name: "newId", type: "uint256" }],
-    stateMutability: "nonpayable",
-    type: "function",
-  },
-  {
-    inputs: [
       { internalType: "address", name: "account", type: "address" },
-      { internalType: "uint256", name: "id", type: "uint256" },
+      { internalType: "uint256", name: "id",      type: "uint256" },
     ],
     name: "balanceOf",
     outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
@@ -66,9 +127,8 @@ const ERC1155_ABI = [
   },
 ];
 
-//
-// 3) ABI solo para el evento TransferSingle
-//
+
+
 const TRANSFER_SINGLE_EVENT_ABI = [
   {
     anonymous: false,
@@ -101,6 +161,13 @@ export async function connectWallet(): Promise<string | null> {
   classContract = new Contract(CLASS_CONTRACT_ADDRESS, CLASS_ABI, signer);
   erc1155Contract = new Contract(ERC1155_CONTRACT_ADDRESS, ERC1155_ABI, signer);
 
+  try {
+    const ownerOnChain = await erc1155Contract.owner();
+    console.log("Owner on-chain:", ownerOnChain);
+  } catch (e) {
+    console.error("No pude leer owner():", e);
+  }
+
   return await signer.getAddress();
 }
 
@@ -110,17 +177,15 @@ export async function getClaseData(tokenId: string) {
   return {
     clase: data.clase.toString(),
     tema: data.tema,
+    descripcion: data.descripcion,
     alumno: data.alumno,
   };
 }
 
-/**
- * Obtiene la fecha de minteo (TransferSingle from=zero) de un token ERC-1155.
- */
+
 export async function getMintDate(tokenId: string): Promise<Date | null> {
   if (!provider) return null;
 
-  // Creamos un contrato ligero sólo con el ABI del evento
   const evtContract = new Contract(
     ERC1155_CONTRACT_ADDRESS,
     TRANSFER_SINGLE_EVENT_ABI,
@@ -129,14 +194,12 @@ export async function getMintDate(tokenId: string): Promise<Date | null> {
 
   const zero = "0x0000000000000000000000000000000000000000";
 
-  // Traemos todos los TransferSingle desde el block 0
   const events = await evtContract.queryFilter(
     evtContract.filters.TransferSingle(null, zero, null),
     0,
     "latest"
   ) as any[];
 
-  // Buscamos el primero que coincida con nuestro tokenId
   const ev = events.find(e => {
     const idArg = e.args?.id;
     const num = typeof idArg.toNumber === "function"
@@ -154,8 +217,10 @@ export async function getMintDate(tokenId: string): Promise<Date | null> {
 
 export async function mint(
   to: string,
-  amount: number = 1,
-  data: string = "0x"
+  amount: number,
+  data: string,
+  titleData: string,
+  descriptionData: string
 ): Promise<number | null> {
   if (!signer || !erc1155Contract) {
     alert("Conectá tu wallet antes de mintear.");
@@ -167,7 +232,9 @@ export async function mint(
   const tx: TransactionResponse = await erc1155Contract.mintNew(
     to,
     amount,
-    data
+    data,
+    titleData,
+    descriptionData,
   );
   alert(`Transacción enviada\nHash: ${tx.hash}\nEspera confirmación...`);
   await tx.wait();
@@ -182,4 +249,31 @@ export async function balanceOf(
   if (!erc1155Contract) return null;
   const balBN = await erc1155Contract.balanceOf(account, id);
   return balBN.toString();
+}
+
+export async function promote(
+  to: string,
+  amount: number,
+  data: string,
+  titleData: string,
+  descriptionData: string
+): Promise<number | null> {
+  if (!signer || !erc1155Contract) {
+    alert("Conectá tu wallet antes de mintear.");
+    return null;
+  }
+  const nextIdBN = await erc1155Contract.nextTokenId();
+  const nextId = Number(nextIdBN);
+
+  const tx: TransactionResponse = await erc1155Contract.mintPromotion(
+    to,
+    amount,
+    data,
+    titleData,
+    descriptionData,
+  );
+  alert(`Transacción enviada\nHash: ${tx.hash}\nEspera confirmación...`);
+  await tx.wait();
+  alert(`Mint exitoso! Token ID: ${nextId}`);
+  return nextId;
 }
