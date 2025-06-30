@@ -12,7 +12,7 @@ import confetti from 'canvas-confetti';
 
 const PROFESSOR_CONTRACT = "0x1fee62d24daa9fc0a18341b582937be1d837f91d";
 const ADMIN_ADDRESS = "0xdC9a1c08BF68571eD4990eC7B6De0A8fe77f09C6".toLowerCase();
-const MY_CONTRACT        = "0x4CB8FB803f177270831D47fce9bd2D30aC1efBfA";
+const MY_CONTRACT        = "0xB6C4516cbb859Aaa9FAddF2626D4C2E1a47EFf87";
 const REQUIRED_TOKEN_IDS = [6, 14, 22, 31, 45, 46, 59, 60, 73, 80];
 const CUTOFF_TIMESTAMP = Math.floor(
   new Date("2025-05-28T00:00:00Z").getTime() / 1000
@@ -255,6 +255,7 @@ export default function Home() {
 
     if (!walletAddress) return alert("Conéctate primero.");
     if (!hasPromoToken) return alert("No tienes el NFT de promoción.");
+    if (promoUsedOnChain) return alert("🚨 Ya enviaste la promoción. Solo se permite una vez.");
     if (!pendingAlumnoName.trim()) return alert("Por favor ingresa el nombre del alumno.");
   
     setLoading(true);
@@ -305,7 +306,6 @@ export default function Home() {
       try {
         const c = new Contract(MY_CONTRACT, ERC1155_ABI, provider);
         const used = await c.hasPromoted(walletAddress);
-        console.log("🔍 hasPromoted on-chain:", used);
         setPromoUsedOnChain(used);
       } catch (err) {
         console.error("No pude leer hasPromoted después de mint:", err);

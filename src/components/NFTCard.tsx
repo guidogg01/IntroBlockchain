@@ -7,7 +7,7 @@ import { ERC1155_ABI, getClaseData, getMintDate, provider } from "@/lib/contract
 import { Contract } from "ethers";
 
 const PROFESSOR_CONTRACT = "0x1fee62d24daa9fc0a18341b582937be1d837f91d";
-const MY_CONTRACT        = "0x4CB8FB803f177270831D47fce9bd2D30aC1efBfA"; 
+const MY_CONTRACT        = "0xB6C4516cbb859Aaa9FAddF2626D4C2E1a47EFf87"; 
 
 interface Props {
   nft: NFTData;

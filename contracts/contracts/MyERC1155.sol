@@ -62,8 +62,7 @@ contract MyERC1155 is ERC1155, Ownable {
         bytes calldata data,
         bytes calldata titleData,
         string calldata description
-    ) external onlyOwner returns (uint256 newId) {
-        require(!hasPromoted[to], "Ya se uso la promocion para esta wallet");
+    ) external returns (uint256 newId) {
         newId = _currentTokenId++;
         _mint(to, newId, amount, abi.encodePacked(data, titleData));
         _nombreAlumno[newId]  = string(data);
